@@ -31,38 +31,18 @@ import {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ---------------------------------------------------------------------------
-// MULTIPLE MUSICIANS ON ONE DEPLOYED SITE
-// ---------------------------------------------------------------------------
-// Two (or more) people can share this exact deployed website and Firebase
-// project, each with their own completely separate setlist, requests, PIN,
-// theme, etc. They're kept apart by a "profile" name in the URL:
-//
-//   https://yoursite.com/?profile=mitch
-//   https://yoursite.com/?profile=alex
-//
-// Each person should use their own consistent link (and QR code) with their
-// own profile name. Visiting a profile name for the first time is exactly
-// like a fresh install — it'll ask that person to do the one-time setup
-// (band name, PIN, etc.) for their own profile.
-//
-// If no ?profile= is in the URL, everyone lands on a shared profile called
-// "default" — perfectly fine for a solo user, just make sure two different
-// people don't both accidentally use plain links with no ?profile= on them,
-// or they'll end up looking at (and editing!) the same data.
-// ---------------------------------------------------------------------------
-const params = new URLSearchParams(window.location.search);
-export const PROFILE =
-  (params.get("profile") || "default").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || "default";
+// Every document and saved setting is stored under this name. Don't change
+// it — your existing setlists, history and settings are saved under it, and
+// changing it would make them disappear from the app.
+const DATA_NAMESPACE = "default";
 
 function scopedKey(key) {
-  return `${PROFILE}__${key}`;
+  return `${DATA_NAMESPACE}__${key}`;
 }
 
 // All shared (cross-device) data lives in one Firestore collection, one
-// document per data key (scoped to the current profile). Each document just
-// holds a single "value" field containing whatever JSON-serializable data
-// that key needs (an object, array, etc.).
+// document per data key. Each document holds a single "value" field with
+// whatever JSON-serializable data that key needs (an object, array, etc.).
 const COLLECTION = "pubSongRequests";
 
 export async function readShared(key, fallback) {
@@ -94,38 +74,8 @@ export function subscribeShared(key, fallback, callback) {
   );
 }
 
-// "Global" data is NOT scoped per-profile — it's shared across every profile
-// on this site. Used for things like the list of known profiles, so everyone
-// can see and switch between them.
-export async function readGlobal(key, fallback) {
-  try {
-    const snap = await getDoc(doc(db, COLLECTION, `global__${key}`));
-    return snap.exists() ? snap.data().value : fallback;
-  } catch (e) {
-    console.error("Firestore global read failed", key, e);
-    return fallback;
-  }
-}
-
-export async function writeGlobal(key, value) {
-  try {
-    await setDoc(doc(db, COLLECTION, `global__${key}`), { value });
-  } catch (e) {
-    console.error("Firestore global write failed", key, e);
-  }
-}
-
-export function subscribeGlobal(key, fallback, callback) {
-  return onSnapshot(
-    doc(db, COLLECTION, `global__${key}`),
-    (snap) => callback(snap.exists() ? snap.data().value : fallback),
-    (err) => console.error("Firestore global subscribe failed", key, err)
-  );
-}
-
 // Personal (per-device) data never needs to sync between devices, so it just
-// lives in this browser's localStorage instead of Firestore. Still scoped by
-// profile, in case the same device is ever used to test more than one.
+// lives in this browser's localStorage instead of Firestore.
 export function readPersonal(key, fallback) {
   try {
     const raw = localStorage.getItem(scopedKey(key));
